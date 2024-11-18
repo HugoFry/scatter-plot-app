@@ -1,11 +1,35 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Plot from 'react-plotly.js';
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import CategorySelector from './CategorySelector';
+import { rgb } from 'd3-color';  
+
+
+const CATEGORIES = [
+  { id: 3, name: "Pacemaker" },
+  { id: 12, name: "Unilateral pleural effusion" },
+  { id: 8, name: "Post-surgical hardware" },
+  { id: 7, name: "Clear lung fields" },
+  { id: 2, name: "Dialysis catheter" },
+  { id: 14, name: "Mediastinal shift" },
+  { id: 4, name: "Breathing tube" },
+  { id: 5, name: "Feeding tube" },
+  { id: 9, name: "Orthopaedic implants" },
+  { id: 10, name: "Spinal abnormalities" },
+  { id: 13, name: "Bilateral pleural effusions" },
+  { id: 19, name: "Tortuous aorta" },
+  { id: 25, name: "COPD" }
+];
+
+const VALID_CATEGORY_IDS = new Set(CATEGORIES.map(cat => cat.id));
 
 const InteractiveScatterPlot = () => {
   const [data, setData] = useState([]);
   const [selectedPoint, setSelectedPoint] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPlotReady, setIsPlotReady] = useState(false);
+  const [isPanelOpen, setIsPanelOpen] = useState(true);
 
   const wrapText = (text, maxLength = 50) => {
     const words = text.split(' ');
@@ -40,7 +64,8 @@ const InteractiveScatterPlot = () => {
           x: pointData.embedding[0],
           y: pointData.embedding[1],
           description: pointData.description,
-          wrappedDescription: wrapText(pointData.description)
+          wrappedDescription: wrapText(pointData.description),
+          labels: pointData.labels || []
         }));
         
         setData(transformedData);
@@ -99,6 +124,50 @@ const InteractiveScatterPlot = () => {
     };
   }, [axisRanges]);
 
+  const plotData = useMemo(() => {
+    const getPointColor = (point) => {
+      if (!selectedCategory) return '#0ea5e9';  // sky-500
+      // Filter valid labels before checking
+      const validLabels = point.labels.filter(label => VALID_CATEGORY_IDS.has(label));
+      return validLabels.includes(selectedCategory) ? '#22c55e' : '#0ea5e9';  // green-500 : sky-500
+    };
+  
+    const getPointOpacity = (point) => {
+      if (!selectedCategory) return 0.6;
+      // Filter valid labels before checking
+      const validLabels = point.labels.filter(label => VALID_CATEGORY_IDS.has(label));
+      return validLabels.includes(selectedCategory) ? 1 : 0.3;
+    };
+  
+    return [{
+      x: data.map(d => d.x),
+      y: data.map(d => d.y),
+      mode: 'markers',
+      type: 'scattergl',
+      marker: { 
+        color: data.map(getPointColor),
+        size: 6,
+        opacity: data.map(getPointOpacity),
+        line: {
+          color: data.map(d => {
+            const color = getPointColor(d);
+            return rgb(color).darker(0.5).toString();
+          }),
+          width: 1.5
+        }
+      },
+      text: data.map(d => d.wrappedDescription),
+      hoverinfo: 'text',
+      hoverlabel: {
+        bgcolor: 'white',
+        bordercolor: '#0ea5e9',
+        font: { size: 13 },
+        align: 'left'
+      },
+      ids: data.map((_, index) => index.toString())
+    }];
+  }, [data, selectedCategory]);
+
   const handlePointClick = useCallback((event) => {
     if (!isPlotReady) return;
     
@@ -112,36 +181,14 @@ const InteractiveScatterPlot = () => {
   }, [data, isPlotReady]);
 
   const handlePlotInitialized = useCallback((figure) => {
-    // Wait a brief moment after the plot is initialized before enabling clicks
     setTimeout(() => {
       setIsPlotReady(true);
     }, 1000);
   }, []);
 
-  const plotData = useMemo(() => [{
-    x: data.map(d => d.x),
-    y: data.map(d => d.y),
-    mode: 'markers',
-    type: 'scattergl',
-    marker: { 
-      color: '#0ea5e9',
-      size: 6,
-      opacity: 0.6,
-      line: {
-        color: '#0284c7',
-        width: 1
-      }
-    },
-    text: data.map(d => d.wrappedDescription),
-    hoverinfo: 'text',
-    hoverlabel: {
-      bgcolor: 'white',
-      bordercolor: '#0ea5e9',
-      font: { size: 13 },
-      align: 'left'
-    },
-    ids: data.map((_, index) => index.toString())
-  }], [data]);
+  const handleCategoryChange = (categoryId) => {
+    setSelectedCategory(categoryId === selectedCategory ? null : categoryId);
+  };
 
   if (isLoading) {
     return (
@@ -166,6 +213,7 @@ const InteractiveScatterPlot = () => {
 
       <div className="max-w-6xl mx-auto bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl overflow-hidden border border-gray-100">
         <div className="p-8">
+
           <div className="text-center mb-6">
             <p className="text-lg text-gray-700 font-medium mb-4">
               Geometry of chest X-ray features extracted by SAE-Rad
@@ -180,7 +228,22 @@ const InteractiveScatterPlot = () => {
             </a>
           </div>
 
-          <div className="bg-gray-50/80 rounded-2xl p-6 mb-6 shadow-inner">
+          <div className="flex justify-center mb-8">
+            <CategorySelector
+              categories={CATEGORIES}
+              selectedCategory={selectedCategory}
+              onCategoryChange={handleCategoryChange}
+            />
+          </div>
+
+          <div
+            className="bg-gray-50/80 rounded-2xl p-6 mb-6 shadow-inner"
+            style={{
+              height: '600px', // Fixed height
+              overflow: 'hidden', // Prevent content spillover
+              position: 'relative', // To keep Plot constrained
+            }}
+          >
             {data.length > 0 && plotLayout && (
               <Plot
                 data={plotData}
@@ -190,12 +253,15 @@ const InteractiveScatterPlot = () => {
                   modeBarButtonsToAdd: ['zoom2d', 'pan2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d'],
                   responsive: true,
                   scrollZoom: true,
-                  useWebGL: true
+                  useWebGL: true,
                 }}
                 onClick={handlePointClick}
                 onInitialized={handlePlotInitialized}
                 onUpdate={handlePlotInitialized}
-                style={{ width: '100%' }}
+                style={{
+                  width: '100%',
+                  height: '100%', // Ensures Plot fits the container
+                }}
                 useResizeHandler={true}
               />
             )}
@@ -218,6 +284,21 @@ const InteractiveScatterPlot = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <p className="text-sky-800 text-lg mb-4">{selectedPoint.description}</p>
+                    {selectedPoint.labels.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-sm font-medium text-gray-600 mb-2">Categories:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {/* Filter labels to only show valid categories */}
+                          {selectedPoint.labels
+                            .filter(labelId => VALID_CATEGORY_IDS.has(labelId))
+                            .map(labelId => (
+                              <span key={labelId} className="px-3 py-1 bg-sky-100 text-sky-700 rounded-full text-sm">
+                                {CATEGORIES.find(cat => cat.id === labelId)?.name}
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <img
@@ -237,7 +318,7 @@ const InteractiveScatterPlot = () => {
       <div className="max-w-6xl mx-auto mt-8 text-center">
         <p className="text-sm text-gray-600 bg-white/50 backdrop-blur-sm rounded-xl p-4 inline-block shadow-sm">
           💡 Interactive visualization of SAE features. Each point represents a learned feature from the chest X-ray images.
-          Zoom, pan, or click points to explore the feature space.
+          Select a category to highlight relevant points, or click points to explore the feature space.
         </p>
       </div>
     </div>
