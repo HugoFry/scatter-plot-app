@@ -126,10 +126,10 @@ const InteractiveScatterPlot = () => {
 
   const plotData = useMemo(() => {
     const getPointColor = (point) => {
-      if (!selectedCategory) return '#0ea5e9';  // sky-500
+      if (!selectedCategory) return '#D3D3D3';  // sky-500
       // Filter valid labels before checking
       const validLabels = point.labels.filter(label => VALID_CATEGORY_IDS.has(label));
-      return validLabels.includes(selectedCategory) ? '#22c55e' : '#0ea5e9';  // green-500 : sky-500
+      return validLabels.includes(selectedCategory) ? '#22c55e' : '#D3D3D3';  // green-500 : sky-500
     };
   
     const getPointOpacity = (point) => {
